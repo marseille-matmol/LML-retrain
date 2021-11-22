@@ -52,11 +52,11 @@ class LMLPotential:
                 if "rfac0" in line:
                     self.rfac0 = float(line.split(" ")[-1])
                 if "rmin0" in line:
-                    self.rmin0 = line.split(" ")[-1]
+                    self.rmin0 = float(line.split(" ")[-1])
                 if "bzeroflag" in line:
-                    self.bzeroflag = line.split(" ")[-1]
+                    self.bzeroflag = int(line.split(" ")[-1])
                 if "bnormflag" in line:
-                    self.bnormflag = line.split(" ")[-1]
+                    self.bnormflag = int(line.split(" ")[-1])
 
         with open(filename + ".snapcoeff") as coef_file:
             lines = coef_file.readlines()
@@ -82,14 +82,14 @@ class LMLPotential:
         if self.rfac0 is not None:
             param_str += f"rfac0 {self.rfac0}\n"
         if self.rmin0 is not None:
-            param_str += f"rmin0 {self.rmin0}"
+            param_str += f"rmin0 {self.rmin0}\n"
         if self.bzeroflag is not None:
-            param_str += f"bzeroflag {self.bzeroflag}"
+            param_str += f"bzeroflag {self.bzeroflag}\n"
 
         param_str += f"quadraticflag {int(not write_linear)}\n"
 
         if self.bnormflag is not None:
-            param_str += f"bnormflag {self.bnormflag}"
+            param_str += f"bnormflag {self.bnormflag}\n"
 
         f = open(f'{filename}.snapparam', 'w')
         f.write(param_str)
