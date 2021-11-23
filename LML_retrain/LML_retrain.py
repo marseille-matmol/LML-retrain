@@ -32,8 +32,8 @@ class LMLPotential:
         self.A_hard = None
         self.A_soft = None
 
-        self.lambda_0 = 400
-        self.lambda_S = 50
+        self.lambda_0 = 5.0e3
+        self.lambda_S = 1.0
 
         self.target_forces = None
         self.target_dD = None
@@ -69,7 +69,7 @@ class LMLPotential:
 
         assert self.linear_theta.size == self.N_linear_desc
 
-    def make_lammps_snap_files(self, filename, write_linear=False):
+    def make_lammps_snap_files(self, filename, write_linear=False, folder=""):
 
 
         param_str = (f"#\n"
@@ -91,7 +91,7 @@ class LMLPotential:
         if self.bnormflag is not None:
             param_str += f"bnormflag {self.bnormflag}\n"
 
-        f = open(f'{filename}.snapparam', 'w')
+        f = open(folder + f'{filename}.snapparam', 'w')
         f.write(param_str)
         f.close()
 
@@ -103,7 +103,7 @@ class LMLPotential:
                           f"1 {self.N_linear_desc}\n"
                           f"{self.symbol_line.strip()}")
 
-            np.savetxt(f"{filename}.snapcoeff", self.linear_theta,
+            np.savetxt(folder + f"{filename}.snapcoeff", self.linear_theta,
                        header=header_str, comments="")
         else:
             header_str = (f"# autogen test\n"
@@ -113,10 +113,10 @@ class LMLPotential:
                           f"1 {self.N_quad_desc}\n"
                           f"{self.symbol_line.strip()}")
             if self.new_theta is not None:
-                np.savetxt(f"{filename}.snapcoeff", self.new_theta,
+                np.savetxt(folder + f"{filename}.snapcoeff", self.new_theta,
                            header=header_str, comments="")
             else:
-                np.savetxt(f"{filename}.snapcoeff", self.theta_0_quad,
+                np.savetxt(folder + f"{filename}.snapcoeff", self.theta_0_quad,
                            header=header_str, comments="")
 
     def make_lammpslib_calc(self, use_default_linear=False):
@@ -131,7 +131,7 @@ class LMLPotential:
         pot_files = [f"{filename}.snapcoeff", f"{filename}.snapparam"]
         # pot_paths = [os.path.join(pot_folder, pot_file for pot_file in pot_files]
         pot_path = " ".join(pot_files)
-
+        # print(pot_path)
         lmpcmds = ["pair_style snap",
                    f"pair_coeff * * {pot_path} {self.symbol}"]
 
@@ -203,15 +203,15 @@ class LMLPotential:
         LML_calc.lmp.close()
         return dD
 
-    def write_retrained_potential(self, title="dislocation", tail=""):
+    def write_retrained_potential(self, title="dislocation", folder=""):
         if self.new_theta is None:
             raise RuntimeError("New potential is not created")
 
         pot_name = "qSNAP" + title + \
-                   f"_Lam0_{self.lambda_0:d}" + \
-                   f"_LamS_{self.lambda_S}_" + tail
+                   f"_Lam0_{self.lambda_0:g}" + \
+                   f"_LamS_{self.lambda_S:g}".replace("0.", "")
 
-        self.make_lammps_snap_files(filename=pot_name)
+        self.make_lammps_snap_files(filename=pot_name, folder=folder)
 
     def plot_w_coefs(self, ax=None):
 
@@ -252,7 +252,8 @@ class LMLPotential:
         return P
 
     def refit_pot_from_forces(self, target_forces, target_dD,
-                              lambda_0=None, lambda_S=None):
+                              lambda_0=None, lambda_S=None,
+                              use_Ps=False):
 
         np.testing.assert_array_equal(target_forces.shape,
                                       (target_dD @ self.theta_0_quad).shape)
@@ -282,21 +283,34 @@ class LMLPotential:
         if lambda_S is not None:
             self.lambda_S = lambda_S
 
-        Q_H = np.eye(self.N_quad_desc) - self.get_projection(self.A_hard)
-        P_S = self.get_projection(self.A_soft, self.N_quad_desc)
+        # Hard projection
+        P_H = self.get_projection(self.A_hard)
+        Q_H = np.eye(self.N_quad_desc) - P_H
+
+        if use_Ps:
+            P_S = self.get_projection(self.A_soft, self.N_quad_desc)
+            D_soft = int(np.diagonal(P_S).sum())
+            print(
+                f"Soft constraints dimensionality: {D_soft:d}/{self.N_quad_desc}")
+
 
         D_hard = int(Q_H.shape[0] - np.diagonal(Q_H).sum())
         print(f"Hard constraints dimensionality: {D_hard:d}/{self.N_quad_desc}")
-        D_soft = int(np.diagonal(P_S).sum())
-        print(f"Soft constraints dimensionality: {D_soft:d}/{self.N_quad_desc}")
 
-        M_S = Q_H @ self.A_soft.T @ self.A_soft @ Q_H
+        if use_Ps:
+            M_S = Q_H @ self.A_soft.T @ self.A_soft @ Q_H
 
-        # Replace this with P_S
-        ev = np.linalg.eigvalsh(M_S)
-        ev = ev[ev > 1.0].mean()
-        M_S = Q_H @ P_S @ Q_H * ev
+            # Replace this with P_S
+            ev = np.linalg.eigvalsh(M_S)
+            ev = ev[ev > 1.0].mean()
+            M_S = Q_H @ P_S @ Q_H * ev
 
+        else:
+            M_S = self.A_soft.T @ self.A_soft
+            print(
+                f"Soft constraints "
+                f"dimensionality: {np.linalg.matrix_rank(M_S):d}"
+                f"/{self.N_quad_desc}")
         # {\bf b} = \delta{\bf F}_{\rm QMML}\cdot\nabla{\bf D}{\bf Q}_{\rm H}
         # lammps compute snad/atom command computes -dD (negative derivatives)
         # thus dD * Theta is forces and the sign is changed compared to
@@ -312,19 +326,22 @@ class LMLPotential:
         # {\bf M} = {\bf Q}_{\rm H}[\nabla{\bf D}]^\top\nabla{\bf D}{\bf Q}_{\rm H}
         M = Q_H @ target_dD.T @ target_dD @ Q_H
 
-        # {\bf M} = \lambda_0\mathbb{I}
-        M += self.lambda_0 * np.eye(Q_H.shape[0]) + self.lambda_S * M_S
+        if use_Ps:
+            # {\bf M} = \lambda_0\mathbb{I}
+            M += self.lambda_0 * np.eye(Q_H.shape[0]) + self.lambda_S * M_S
 
-        # {\bf M} += \lambda_S{\bf Q}_{\rm H}{\bf P}_S{\bf Q}_{\rm H}
-        M += self.lambda_S * M_S  # A_soft.T@A_soft
-        print(np.diag(Q_H @ self.A_soft.T @ self.A_soft @ Q_H).mean(),
-              self.lambda_S * np.diag(Q_H @ P_S @ Q_H).mean())
-        # mod = linear_model.BayesianRidge()#lambda_init=lambda_0)
+            # {\bf M} += \lambda_S{\bf Q}_{\rm H}{\bf P}_S{\bf Q}_{\rm H}
+            M += self.lambda_S * M_S  # A_soft.T@A_soft
+
+        else:
+            M += self.lambda_S * Q_H @ M_S @ Q_H + \
+                 self.lambda_0 * np.eye(Q_H.shape[0])
+            # mod = linear_model.BayesianRidge()#lambda_init=lambda_0)
         # mod.fit(M,b)
         dTheta = np.linalg.solve(M, b)
 
-        print(dTheta @ Q_H @ self.A_soft.T @ self.A_soft @ Q_H @ dTheta,
-              self.lambda_S * dTheta @ Q_H @ P_S @ Q_H @ dTheta)
+        # print(dTheta @ Q_H @ self.A_soft.T @ self.A_soft @ Q_H @ dTheta,
+        #      self.lambda_S * dTheta @ Q_H @ P_S @ Q_H @ dTheta)
 
         self.new_theta = self.theta_0_quad.copy() + Q_H @ dTheta
 
@@ -536,6 +553,49 @@ class LMLPotential:
 
         ax.set_title(" MD Forces", fontsize=10)
         ax.legend(fontsize=10)
+
+        new_calc.lmp.close()
+        old_calc.lmp.close()
+
+
+    def plot_NEB_data(self, images, ax=None):
+
+        if self.new_theta is None:
+            raise RuntimeError("The potential was not retrained!")
+
+        import matplotlib.pyplot as plt
+
+        if ax is None:
+            fig, ax = plt.subplots()
+
+        old_calc = self.make_lammpslib_calc(use_default_linear=True)
+        new_calc = self.make_lammpslib_calc(use_default_linear=False)
+
+        old_E = []
+        new_E = []
+
+        for image in images:
+            image.calc = old_calc
+            old_E.append(image.get_potential_energy())
+
+            image.calc = new_calc
+            new_E.append(image.get_potential_energy())
+
+        new_E = np.array(new_E)
+        new_E -= new_E[0]
+
+        old_E = np.array(old_E)
+        old_E -= old_E[0]
+
+        ax.plot(np.arange(len(images)), old_E, 'o-', lw=2,
+                     label=r"Original $\Theta_0$ Potential")
+        ax.plot(np.arange(len(images)), new_E, 's--', lw=2,
+                     label=r"Refitted $\Theta_0+\delta\Theta$ Potential")
+
+        ax.legend(fontsize=10)
+
+        ax.set_xlabel(r"NEB image", fontsize=10)
+        ax.set_ylabel(r"Energy Difference [eV]", fontsize=10)
 
         new_calc.lmp.close()
         old_calc.lmp.close()
