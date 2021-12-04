@@ -209,7 +209,7 @@ class LMLPotential:
 
         pot_name = "qSNAP" + title + \
                    f"_Lam0_{self.lambda_0:g}" + \
-                   f"_LamS_{self.lambda_S:g}".replace("0.", "")
+                   f"_LamS_{self.lambda_S:g}".replace("0.", "0")
 
         self.make_lammps_snap_files(filename=pot_name, folder=folder)
 
@@ -221,13 +221,16 @@ class LMLPotential:
         if ax is None:
             fig, ax = plt.subplots()
 
-        ax.semilogx(self.theta_0_quad[1:], '-', label="Default values", lw=3)
+        ax.semilogx(self.theta_0_quad[1:],
+                    '--', label="Original LML values $\Theta_0$", lw=1.75,
+                    zorder=10)
 
         if self.new_theta is not None:
-            ax.semilogx(self.new_theta[1:], "-", label="Refitted values", lw=3)
+            ax.semilogx(self.new_theta[1:],
+                        "-", label="Retrained LML values $\Theta_0+\delta\Theta$", lw=2)
 
         ax.set_ylabel('Magnitude')
-        ax.set_xlabel(f"Bispectrum component (N={self.N_quad_desc})")
+        ax.set_xlabel(f"Bispectrum component; N={self.N_quad_desc}")
 
         ax.legend()
         ax.set_xscale("symlog", linthresh=55)
@@ -389,15 +392,16 @@ class LMLPotential:
                     label=f"fmax {delta_new_forces.max():2.2g} " +
                           r"eV/$\rm\AA$")
 
-        ax.set_title("Error to DFT forces from QM/ML", fontsize=10)
+        ax.set_title("Error to DFT forces from QM/ML")
 
-        ax.set_ylabel(r"Force error eV/$\rm\AA$", fontsize=10)
-        ax.set_xlabel(r"Distance from dislocation $\rm\AA$", fontsize=10)
-        ax.legend(fontsize=10)
+        ax.set_ylabel(r"Force error eV/$\rm\AA$")
+        ax.set_xlabel(r"Distance from dislocation $\rm\AA$")
+        ax.legend()
         if fig is not None:
             fig.show()
 
-    def plot_MD_test_train(self, dD_test, dD_train=None, ax=None, force_error=0.1):
+    def plot_MD_test_train(self, dD_test, dD_train=None,
+                           ax=None, force_error=0.1, title=""):
 
         import matplotlib.pyplot as plt
 
@@ -416,7 +420,7 @@ class LMLPotential:
         train_rms = (old_train_forces - new_train_forces).std()
 
         ax.scatter(old_train_forces, new_train_forces,
-                   label=f'Train, RSME = {train_rms:2.2g}' + r' eV/$\rm\AA$')
+                   label=f'Train, RMSE = {train_rms:2.2g}' + r' eV/$\rm\AA$')
 
         old_test_forces = dD_test @ self.theta_0_quad
         new_test_forces = dD_test @ self.new_theta
@@ -424,7 +428,7 @@ class LMLPotential:
         test_rms = (old_test_forces - new_test_forces).std()
 
         ax.scatter(old_test_forces, new_test_forces,
-                   label=f'Test, RSME = {test_rms:2.2g}' + r' geV/$\rm\AA$')
+                   label=f'Test, RMSE = {test_rms:2.2g}' + r' geV/$\rm\AA$')
 
         error_points = np.linspace(old_train_forces.min(),
                                    old_train_forces.max(), 11)
@@ -435,11 +439,14 @@ class LMLPotential:
                         facecolor='k', alpha=0.2,
                         label=r'%2.2geV/$\rm\AA$ error' % force_error)
 
-        ax.set_title("MD Forces", fontsize=10)
+        ax.set_title(title)
         ax.legend(fontsize=10)
+        ax.set_xlabel(r"Original LML Forces (eV/$\rm\AA$)", fontsize=10)
+        ax.set_ylabel(r"Retrained QML Forces (eV/$\rm\AA$)", fontsize=10)
 
 
-    def plot_eos_data(self, configurations, ax=None):
+    def plot_eos_data(self, configurations, ax=None,
+                      title=""):
 
         if self.new_theta is None:
             raise RuntimeError("The potential was not retrained!")
@@ -458,6 +465,7 @@ class LMLPotential:
         indexes = np.unique(labels, return_index=True)[1]
         # this is to keep the order of the labels
         labels = [labels[index] for index in sorted(indexes)]
+        handles = []
         for strain_type in labels:
 
             strains = []
@@ -484,21 +492,26 @@ class LMLPotential:
 
             ax.scatter(strains, new_energies / len(configs[0]), s=50)
             ax.plot(strains, old_energies / len(configs[0]),
-                    lw=2.0, label=strain_type)
+                    lw=2.0, label=strain_type.replace("bar", r"\bar"))
+
+            handles.append(ax.plot([], [], "-o", c=ax.get_lines()[-1].get_color(),
+                                   label=strain_type.replace("bar", r"\bar"))[0])
 
         ax.set_xlabel(r'Strain $\epsilon$ (%)')
         ax.set_xticks(strains[::4])
 
-        ax.legend()
+        ax.legend(handles=handles,
+                  title="Equation of state\nlines: original LML\ndots: retrained LML")
 
-        ax.set_ylabel(r"$\Delta E_{\rm coh}$ [meV/atom]")
-        ax.set_ylabel(r"$\Delta E_{\rm coh}$ [meV/atom]")
-        ax.set_title("EOS test")
+        ax.set_ylabel(r"$\Delta E_{\rm coh}$ (meV/atom)")
+
+        ax.set_title(title)
+        ax.set_ylim(-0.1, 2.8)
         new_calc.lmp.close()
         old_calc.lmp.close()
 
     def plot_MD_test_train_atoms(self, test_config, train_configs, ax=None,
-                                 force_error=0.1):
+                                 force_error=0.1, title=""):
 
 
         if self.new_theta is None:
@@ -527,9 +540,9 @@ class LMLPotential:
         old_train_forces = np.concatenate(old_train_forces)
 
         train_rms = (old_train_forces - new_train_forces).std()
-        print(train_rms)
+        print(f"Train RMSE = {train_rms:2.2g} eV/A")
         ax.scatter(old_train_forces, new_train_forces,
-                   label=f'Train, RSME = {train_rms:2.2g}' + r' eV/$\rm\AA$')
+                   label=f'Train, RMSE = {train_rms:2.2g}' + r' eV/$\rm\AA$')
 
         test_config.calc = old_calc
         old_test_forces = test_config.get_forces().flatten()
@@ -538,24 +551,30 @@ class LMLPotential:
         new_test_forces = test_config.get_forces().flatten()
 
         test_rms = (old_test_forces - new_test_forces).std()
-        print(test_rms)
+        print(f'Test RMSE = {test_rms:2.2g} eV/A')
         ax.scatter(old_test_forces, new_test_forces,
-                   label=f'Test, RSME = {test_rms:2.2g}' + r' eV/$\rm\AA$')
+                   label=f'Test, RMSE = {test_rms:2.2g}' + r' eV/$\rm\AA$')
 
         error_points = np.linspace(old_train_forces.min(),
                                    old_train_forces.max(), 11)
-
+        """
         ax.fill_between(error_points,
                         error_points - force_error,
                         error_points + force_error,
                         facecolor='k', alpha=0.2,
                         label=r'%2.2g eV/$\rm\AA$ error' % force_error)
+        """
+        #ax.set_title(title)
+        # ymin, ymax = ax.get_ylim()
+        # ax.set_ylim((ymin, 1.2 * ymax)
+        ax.legend( title=title)
 
-        ax.set_title(" MD Forces", fontsize=10)
-        ax.legend(fontsize=10)
+        ax.set_xlabel(r"Original LML Forces (eV/$\rm\AA$)")
+        ax.set_ylabel(r"Retrained LML Forces (eV/$\rm\AA$)")
 
         new_calc.lmp.close()
         old_calc.lmp.close()
+
 
 
     def plot_NEB_data(self, images, ax=None):
