@@ -5,7 +5,14 @@ from scipy.linalg import orth
 class LMLPotential:
 
     def __init__(self, filename):
+        """
+        Initialise the object by loading SNAP files in lammps format.
+        Reads filename.snapparam and filename.snapcoeff.
 
+        Parameters
+        ----------
+        filename : str path to load SNAP potential file in lammps format
+        """
         # snapparam
         self.cutoff = None
         self.twojmax = None
@@ -41,7 +48,17 @@ class LMLPotential:
         self.new_theta = None
 
     def load_lammps_snap_files(self, filename):
+        """
+        Reads filename.snapparam and filename.snapcoeff
 
+        Parameters
+        ----------
+        filename : str path to load SNAP potential file in lammps format.
+
+        Returns
+        -------
+        None
+        """
         # load parameters first
         with open(filename + ".snapparam") as param_file:
             for line in param_file.readlines():
@@ -70,7 +87,25 @@ class LMLPotential:
         assert self.linear_theta.size == self.N_linear_desc
 
     def make_lammps_snap_files(self, filename, write_linear=False, folder=""):
+        """
+        Writes potential in lammps format files:
+        filename.snapparam and filename.snapcoeff
 
+        Parameters
+        ----------
+        filename : str
+            Files for output filename.snapparam and filename.snapcoeff
+        write_linear : bool
+            If True writes initially loaded linear form of the potential,
+            if False writes quadratic form of the retrained potential,
+            default is False
+        folder : str
+            path to folder for the output.
+
+        Returns
+        -------
+
+        """
 
         param_str = (f"#\n"
                      f"#\n"
@@ -120,7 +155,21 @@ class LMLPotential:
                            header=header_str, comments="")
 
     def make_lammpslib_calc(self, use_default_linear=False):
+        """
+        Created LAMMPSlib calculator that can be used with ase.atoms
 
+        Parameters
+        ----------
+        use_default_linear : bool
+            If True uses initially loaded linear form of the potential,
+            if False uses quadratic form of the retrained potential,
+            default is False.
+
+        Returns
+        -------
+        ase.calculator
+
+        """
         import os
         from ase.calculators.lammpslib import LAMMPSlib
 
@@ -148,7 +197,22 @@ class LMLPotential:
         return ML_calc
 
     def get_D(self, atoms, linear=False):
+        """
+        Calculates bispectrum (SNAP) descriptor vector from ase.atoms
+        Parameters
+        ----------
+        atoms : ase.atoms object
+            atoms object containing atomic positions
+        linear: bool
+            If True uses linear form of the descriptor
+            (controls the size of the vector)
 
+        Returns
+        -------
+        D : np.array
+            Array of descriptor values with shape (N_atoms, N_desc)
+
+        """
         LML_calc = self.make_lammpslib_calc(use_default_linear=linear)
         atoms.calc = LML_calc
         E = atoms.get_potential_energy()
@@ -176,7 +240,22 @@ class LMLPotential:
         return D
 
     def get_dD(self, atoms, linear=False):
+        """
+        Computes descriptor derivatives for a given ase.atoms object
+        Parameters
+        ----------
+        atoms : ase.atoms object
+            atoms object containing atomic positions.
+        linear: bool
+            If True uses linear form of the descriptor
+            (controls the size of the vector).
 
+        Returns
+        -------
+        dD : np.array
+            Array of descriptor derivatives values
+            with shape (N_atoms, 3, N_desc).
+        """
         LML_calc = self.make_lammpslib_calc(use_default_linear=linear)
         atoms.calc = LML_calc
         E = atoms.get_potential_energy()
@@ -204,6 +283,19 @@ class LMLPotential:
         return dD
 
     def write_retrained_potential(self, title="dislocation", folder=""):
+        """
+        Write retrained potential in lammps format.
+        Parameters
+        ----------
+        title : str
+            title of the potential to add in the final filename.
+        folder : str
+            path to the folder.
+
+        Returns
+        -------
+        None
+        """
         if self.new_theta is None:
             raise RuntimeError("New potential is not created")
 
@@ -214,6 +306,17 @@ class LMLPotential:
         self.make_lammps_snap_files(filename=pot_name, folder=folder)
 
     def plot_w_coefs(self, ax=None):
+        """
+        plots coefficient of the original and retrained potentials.
+        Parameters
+        ----------
+        ax : matplotlib.axes
+            plot on existing axes, otherwise create a new figure
+
+        Returns
+        -------
+        None
+        """
 
         import matplotlib.pyplot as plt
 
@@ -238,6 +341,23 @@ class LMLPotential:
             fig.show()
 
     def get_projection(self, matrix_A, size=None):
+        """
+        Build projection of a constraint matrix using scipy.linalg.orth.
+        Is used for getting projection matrix for hard constraints.
+
+        Parameters
+        ----------
+        matrix_A : np.array
+            Matrix to build projection.
+        size : int
+            Size of the matrix.
+            Default is None and the size is defined by self.N_quad_desc
+
+        Returns
+        -------
+        P : np.array
+            Projection matrix.
+        """
 
         if size is None:
             size = self.N_quad_desc
@@ -257,7 +377,33 @@ class LMLPotential:
     def refit_pot_from_forces(self, target_forces, target_dD,
                               lambda_0=None, lambda_S=None,
                               use_Ps=False):
+        """
+        Function to perform constrained retraining, i.e.
+        find a solution for minimizing loss function given
+        in equation (3) of the manuscript: https://arxiv.org/abs/2111.11262.
 
+        Parameters
+        ----------
+        target_forces : np.array
+            array of target forces with shape (N_atoms, 3),
+            For the manuscript we used QM/ML forces.
+        target_dD : np.array
+            target descriptor derivatives with shape (N_atoms, 3, N_desc).
+        lambda_0 : flaot
+            Regularisation coefficient, see eq 3.
+        lambda_S : float
+            Soft constraints coefficient, see eq 3.
+        use_Ps : bool
+            If True soft constrained matrix is projected as well.
+             This is a testing option and in the retraining
+             reported in the paper it was not used.
+
+        Returns
+        -------
+        None
+            But updates the self.new_theta.
+
+        """
         np.testing.assert_array_equal(target_forces.shape,
                                       (target_dD @ self.theta_0_quad).shape)
 
@@ -352,7 +498,25 @@ class LMLPotential:
 
     def plot_target_force_error(self, target_positions, components=True,
                                 ax=None):
+        """
+        Function to plot force error on target configurations
 
+        Parameters
+        ----------
+        target_positions : np.array
+            Target positions with shape (N_atoms, 3)
+        components : bool
+            Controls the way error is computer.
+            If True error on force components is computed,
+            otherwise error on total force is computed.
+            Both ways give very similar results.
+        ax : matplotlib.axes
+            plot on existing axes, otherwise create a new figure.
+
+        Returns
+        -------
+        None
+        """
         import matplotlib.pyplot as plt
 
         if self.new_theta is None:
@@ -402,7 +566,26 @@ class LMLPotential:
 
     def plot_MD_test_train(self, dD_test, dD_train=None,
                            ax=None, force_error=0.1, title=""):
+        """
+        Plots test train force error given arrays of descriptor derivatives.
 
+        Parameters
+        ----------
+        dD_test : np.array
+            Descriptor derivatives on test configuration.
+        dD_train : np.array
+            Descriptor derivatives on train configuration.
+        ax : matplotlib.axes
+            plot on existing axes, otherwise create a new figure.
+        force_error : float
+            Value to plot as an error interval.
+        title : str
+            Title of the figure.
+
+        Returns
+        -------
+        None
+        """
         import matplotlib.pyplot as plt
 
         if self.new_theta is None:
@@ -447,7 +630,25 @@ class LMLPotential:
 
     def plot_eos_data(self, configurations, ax=None,
                       title=""):
+        """
+        Evaluates and plot total energy values with original
+        and retrained potentials on atoms object
+        of Equation of State configurations:
 
+        Parameters
+        ----------
+        configurations : list of ase.atoms
+            List of configurations with strain
+            labels in ase.atoms.info["strain_info"].
+        ax : matplotlib.axes
+            plot on existing axes, otherwise create a new figure.
+        title : str
+            Title of the figure
+
+        Returns
+        -------
+        None
+        """
         if self.new_theta is None:
             raise RuntimeError("The potential was not retrained!")
 
@@ -511,8 +712,24 @@ class LMLPotential:
         old_calc.lmp.close()
 
     def plot_MD_test_train_atoms(self, test_config, train_configs, ax=None,
-                                 force_error=0.1, title=""):
+                                 title=""):
+        """
+        Plots test train force error given ase.atoms objects.
+        Parameters
+        ----------
+        test_config : ase.atoms
+            test configuration.
+        train_configs : list of ase.atoms
+            training configurations.
+        ax : matplotlib.axes
+            plot on existing axes, otherwise create a new figure.
+        title : str
+            Title of the figure
 
+        Returns
+        -------
+        None
+        """
 
         if self.new_theta is None:
             raise RuntimeError("The potential was not retrained!")
@@ -575,10 +792,21 @@ class LMLPotential:
         new_calc.lmp.close()
         old_calc.lmp.close()
 
-
-
     def plot_NEB_data(self, images, ax=None):
+        """
+        Evaluates and plots NEB path for original and retrained potentials.
 
+        Parameters
+        ----------
+        images : list of ase.atoms
+            NEB path images.
+        ax : matplotlib.axes
+            plot on existing axes, otherwise create a new figure.
+
+        Returns
+        -------
+        None
+        """
         if self.new_theta is None:
             raise RuntimeError("The potential was not retrained!")
 
