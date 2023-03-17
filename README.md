@@ -1,4 +1,4 @@
-Hybrid Quantum Mechancial / Machine Learning (QMML) Simulations : LML_retrain
+QMML: Hybrid Quantum Mechancial / Machine Learning 
 ===========
 
 Implementation of constrained retraining procedure for linear machine learning potentials as described in 
