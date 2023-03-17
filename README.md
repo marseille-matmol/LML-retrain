@@ -1,7 +1,11 @@
-QMML: Hybrid Quantum Mechancial / Machine Learning 
+QMML: Hybrid *ab initio*-machine learning simulations of dislocations
 ===========
 
-Implementation of constrained retraining procedure for linear machine learning potentials as described in 
+`LML_retrain` is an advanced coupling scheme to embed small DFT simulations in large-scale MD goverened by machine learning potentials.
+
+Specifically, we employ a constrained retraining procedure for *linear* machine learning potentials
+
+The method is described in detail in a recent publication:
 [*Calculation of dislocation binding to helium-vacancy defects in tungsten using hybrid ab initio-machine learning methods*]
 Acta Materialia, 2023: https://doi.org/10.1016/j.actamat.2023.118734
 ArXiv preprint: https://arxiv.org/abs/2111.11262
