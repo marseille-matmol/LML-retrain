@@ -3,9 +3,10 @@
 <table align="center" style="border:0px solid white;"> 
   <tr style="border:0px;">
     <td width="700" style="border:0px;">
+      <p>
       <code>LML_retrain</code> is an advanced coupling scheme to embed small DFT simulations in large-scale MD.
       To enable this embedding, we retrain (make small parameter adjustments to) <i>linear</i> machine learning potentials,
-      giving seamless coupling between DFT and MD, to significantly extend the scope of hybrid simulation methods.<br>
+      giving seamless coupling between DFT and MD, to significantly extend the scope of hybrid simulation methods.</p>
       <p align=center>
     <img align=center src="screw_dislocation_W_He_qmml.png"  width="300">
       <br>
@@ -13,12 +14,10 @@
         </p>
       The method is described in detail in a recent publication:
 <i>Calculation of dislocation binding to helium-vacancy defects in tungsten using hybrid ab initio-machine learning methods</i>
-      <br> Acta Materialia, 2023: https://doi.org/10.1016/j.actamat.2023.118734
-      <br> ArXiv preprint: https://arxiv.org/abs/2111.11262
-<br>
-      
-Project funded by ANR JCJC [MeMoPas](https://anr.fr/Project-ANR-19-CE46-0006), PI: [TD Swinburne](https://tomswinburne.github.io)
-
+      <p> Acta Materialia, 2023: https://doi.org/10.1016/j.actamat.2023.118734</p>
+      <p> ArXiv preprint: https://arxiv.org/abs/2111.11262</p>
+      <p>Project funded by ANR JCJC MeMoPas: https://anr.fr/Project-ANR-19-CE46-0006</p>
+      <p>Team: Petr Grigorev (https://pgrigorev.github.io) and TD Swinburne (PI, https://tomswinburne.github.io), CNRS and CINaM Marseille</p>
 
 # Requirements
 
